@@ -1,0 +1,9 @@
+0000000000000000000000000000000000000000 7b5f6d1d47162b30e6392683a89717550ef8fe06 hcg <hcg@pc.homenet.telecomitalia.it> 1729859871 +0200	commit (initial): first commit
+7b5f6d1d47162b30e6392683a89717550ef8fe06 0000000000000000000000000000000000000000 hcg <hcg@pc.homenet.telecomitalia.it> 1729859875 +0200	Branch: renamed refs/heads/master to refs/heads/main
+0000000000000000000000000000000000000000 7b5f6d1d47162b30e6392683a89717550ef8fe06 hcg <hcg@pc.homenet.telecomitalia.it> 1729859875 +0200	Branch: renamed refs/heads/master to refs/heads/main
+7b5f6d1d47162b30e6392683a89717550ef8fe06 4d3d110a961db0ff1e5afa2ca2ed0efdb29c824c hcg <hcg@pc.homenet.telecomitalia.it> 1729870287 +0200	commit: finished raw mode and some error handling
+4d3d110a961db0ff1e5afa2ca2ed0efdb29c824c 0000000000000000000000000000000000000000 hcg <hcg@pc.homenet.telecomitalia.it> 1729870317 +0200	Branch: renamed refs/heads/main to refs/heads/main
+4d3d110a961db0ff1e5afa2ca2ed0efdb29c824c 4d3d110a961db0ff1e5afa2ca2ed0efdb29c824c hcg <hcg@pc.homenet.telecomitalia.it> 1729870317 +0200	Branch: renamed refs/heads/main to refs/heads/main
+4d3d110a961db0ff1e5afa2ca2ed0efdb29c824c 81c59de729701d0cfd8039426c40d5f9555516ca hcg <hcg@pc.homenet.telecomitalia.it> 1729870640 +0200	pull: Merge made by the 'ort' strategy.
+81c59de729701d0cfd8039426c40d5f9555516ca 724ef521034680249371e1b3f80fc8ae9ab63800 hcg <hcg@pc.homenet.telecomitalia.it> 1729892706 +0200	commit: added ctrl capabilities and the base for a UI, better comments
+724ef521034680249371e1b3f80fc8ae9ab63800 a34e73b3c9ff345d8bc3002f2b3f6b1340315dd1 hcg <hcg@pc.homenet.telecomitalia.it> 1730581896 +0100	commit: tilde ai lati
