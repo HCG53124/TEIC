@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <errno.h>
+#include <sys/ioctl.h>
 
 /*** inludes end ***/
 
@@ -20,7 +21,16 @@
 
 /***data start***/
 
-struct termios original;
+struct editorConfig 
+{
+    int screenrows;
+    int screencols;
+
+    struct termios orig_termios;
+};
+
+struct editorConfig E;
+//Usato per ripristinare il terminale dell'utente a sessione terminata.
 
 /*** data end ***/
 
@@ -31,24 +41,25 @@ void error(const char *s)//handlign del messaggio di errore
 	write(STDOUT_FILENO, "\x1b[2J", 4);
   	write(STDOUT_FILENO, "\x1b[H", 3);
 
-	perror(s);
+	perror(s);//funziona perchè const char *s è il primo
+			 //carattere della stringa che "attiva" perror
 	exit(1);
 	
 }
 
 void returnCookedMode()
 {
-	  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &original) == -1) 
+	  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1) 
 	  	error("tcgetattr");
 	
 }
 
 void rawMode()
 {
-	if (tcgetattr(STDIN_FILENO, &original) == -1) 
+	if (tcgetattr(STDIN_FILENO, &E.orig_termios) == -1) 
 		error("tcgetattr");
 
-	struct termios raw = original;
+	struct termios raw = E.orig_termios;
 
 	//DISABILITA FLAG PER PERMETTERE EDITING NEL TEXT EDITOR E NON NEL TERMINALE
 						
@@ -94,9 +105,34 @@ char readKey(void)
 	return c;
 }
 
+int getWindowSize(int *rows, int *cols) 
+{
+    struct winsize ws;
+    
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) 
+    {
+      return -1;
+    } 
+    else 
+    {
+      *cols = ws.ws_col;
+      *rows = ws.ws_row;
+      return 0;
+  }
+}
+
 /*** terminal end ***/
 
 /*** UI start ***/
+
+void drawTilde() 
+{
+    int y;
+    for (y = 0; y < E.screenrows; y++) 
+    {
+      write(STDOUT_FILENO, "~\r\n", 3);
+    }
+}
 
 void renderUI()
 {
@@ -105,8 +141,11 @@ void renderUI()
 	//1 byte: \x1b, che equivale all'escale character 27
 	//2 byte: [, insieme a \x1b formano una escape sequence, ovvero diciamo al terminale come formattare il testo
 	//3+4 byte: 2J, pulisce lo schermo(J) per intero(2)
+
+	drawTilde();
 	write(STDOUT_FILENO, "\x1b[H", 3);
 	//H riposizione il cursore in 1;1 nel temrinale
+
 }
 
 /***UI end***/
@@ -132,9 +171,19 @@ void keypress()
 
 /*** input end ***/
 
+/*** initialization ***/
+
+void initEditor() 
+{
+    if (getWindowSize(&E.screenrows, &E.screencols) == -1)
+   	   error("getWindowSize");
+}
+
+
 int main()
 {
 	rawMode();
+	initEditor();
 	
 	while (1) 
 	{
@@ -150,3 +199,4 @@ int main()
 														
 	return 0;
 }
+
