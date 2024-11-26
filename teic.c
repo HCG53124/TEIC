@@ -74,13 +74,11 @@ void rawMode()
 	//*** LISTA FLAG ***//
 
 		//ICANON serve per leggere byte per byte e non stringhe intere, disattivo, quindi, la canonical mode.
-		//ISIG disattiva ctrl-c/z/ che equivalgono al terminale il processo corrente, il primo, e sospenderlo
-		//il secondo
-		//IEXTEN disattiva ctrl-v non pasando in input caratteri scritti dopo averlo premuto
+		//ISIG disattiva ctrl-c/z/ che equivalgono al terminale il processo corrente, il primo, e sospenderlo il secondo
+		//IEXTEN disattiva ctrl-v non pasando in input i caratteri scritti dopo averlo premuto
 		//IXON disattiva ctrl-s/q che usiamo per sospendere e riprendere processi
 		//ICRNL disattiva ctrl-m che riporta a capo dando in input quello che c'è scritto(carraige return on newline)
-		//OPOST si occupa di disattivare la funzione automtica del terminale \r che riporta all'inizio 
-		//della riga il cursore
+		//OPOST si occupa di disattivare la funzione automtica del terminale \r che riporta all'inizio della riga il cursore
 
 	//*** FINE LISTA FLAG ***//
 
@@ -96,7 +94,8 @@ char readKey(void)
 	int check;
 	char c;
 
-	while((check = read(STDIN_FILENO, &c, 1)) != 1)
+	while((check = read(STDIN_FILENO, &c, 1)) != 1)//finchè non gli passo più di un char
+	//avendo disattivato ICANON sarebbe anomalo avere più byte passati alla func
 	{
 		if(check == -1 && errno != EAGAIN)
 			error("read");
@@ -108,56 +107,47 @@ char readKey(void)
 int cursorPos(int *rows, int *cols)
 {
 	char buf[32];
-	unsigned int i = 0;
-	
-	if(write(STDOUT_FILENO, "\x1b[6n",4) != 4)
-	{
-		while(i < sizeof(buf) -1)
-		{
-			if(read(STDIN_FILENO, &buf[i],1) != 1)
-				break; 
-		}
-		
-		buf[i] = '\0';
+    unsigned int i = 0;
 
-		printf("\r\n&buf[1]: '%s\r\n'",&buf[1]);
-	}	
+    if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4)//scriviamo al terminale cosa vogliamo in out
+    //n lo usiamo per status info sul terminale la 6° info è quella riguardante la pos
+    //del cursore
+    	return -1;
 
-	printf("\r\n");
+    while (i < sizeof(buf) - 1) 
+    {
+    	if (read(STDIN_FILENO, &buf[i], 1) != 1)
+			break;
 
-	char c;
+        if (buf[i] == 'R') 
+        	break;
 
-	while(read(STDIN_FILENO, &c, 1) == 1)
-	{
-		if(iscntrl(c))
-		{
-			printf("%d\r\n",c);
-		}
-		else
-		{
-			printf("%d ('%c')\r\n",c,c);
-				
-		}
-		
-	}
+        i++;
+    }
 
-	readKey();
+    buf[i] = '\0';
 
-	return -1;
+    if (buf[1] == '[')
+    	 return -1;
+
+    if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) 
+    	return -1;
+
+    return 0;
+
 }
 
 int getWindowSize(int *rows, int *cols) 
 {
     struct winsize ws;
     
-	if (1 || ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) 
-	{
-    	if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) 
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) 
+	{						//get win size
+    	if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 10) != 10)
+    	//B = cursod down C = Cursor Forward
     		return -1;
 
     	return cursorPos(rows, cols);
-
-        return -1;
     } 
     else 
     {
