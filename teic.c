@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <string.h> 
 
 /*** inludes end ***/
 
@@ -158,34 +159,74 @@ int getWindowSize(int *rows, int *cols)
 }
 
 
+/*** Buffer ***/
 
+struct tBuf//buffer per fare tutti i write() delle tilde insieme, invece che una alla volta
+{
+	char *buf;
+	int lenght;
+};
 
+#define TBUF_INIT {NULL,0} //inizializzo il buffer
+
+void makeBuf(struct tBuf *newBuf, const char *string, int bufLen)
+{
+	char *new = realloc(newBuf->buf, newBuf->lenght + bufLen);//new è l'oggetto di grandezza l+bl
+
+	if(new == NULL)
+	{	
+		return;
+	}
+
+	memcpy(&new[newBuf->lenght], string, bufLen);
+	newBuf->buf = new;
+	newBuf->lenght += bufLen; 
+}
+
+void freeBuf(struct tBuf *freeBuff)
+{
+	free(freeBuff->buf);
+}
+/*** End Buffer ***/
 
 /*** terminal end ***/
 
 /*** UI start ***/
 
-void drawTilde() 
+void drawTilde(struct tBuf *tildeBuff) 
 {
     int y;
     for (y = 0; y < E.screenrows; y++) 
     {
-      write(STDOUT_FILENO, "~\r\n", 3);
+      makeBuf(tildeBuff, "~", 1);
+
+      if(y < E.screenrows - 1)
+      {
+      	makeBuf(tildeBuff, "\r\n", 2);
+      }
     }
 }
 
 void renderUI()
 {
-	write(STDOUT_FILENO, "\x1b[2J", 4);
-	//passiamo 4 byte al terminale:
+	struct tBuf buff = TBUF_INIT;
+
+	makeBuf(&buff, "\x1b[2J",4);
+	makeBuf(&buff, "\x1b[H",3);
+
+	
+	drawTilde(&buff);
+
+	makeBuf(&buff, "\x1b[H",3);
+	
+	write(STDOUT_FILENO,buff.buf, buff.lenght);
+	//passiamo 4 byte in memoria:
 	//1 byte: \x1b, che equivale all'escale character 27
 	//2 byte: [, insieme a \x1b formano una escape sequence, ovvero diciamo al terminale come formattare il testo
 	//3+4 byte: 2J, pulisce lo schermo(J) per intero(2)
-
-	drawTilde();
-	write(STDOUT_FILENO, "\x1b[H", 3);
 	//H riposizione il cursore in 1;1 nel temrinale
 
+	freeBuf(&buff);
 }
 
 /***UI end***/
