@@ -13,6 +13,8 @@
 
 /*** defines start ***/
 
+#define TEIC_VERSION "0.0.1"
+
 #define CTRL_KEY(k) ((k) & 0x1f)
 //faccio l'AND tra k e 0x1f(0001 1111) e lo uso perchè così ogni numero a 8 bit (ASCII quindi) ha i primi 3 bit
 //azzerati, questo mi permetto di usare i codici di controllo(che vanno da 0 a 31) senza fatica richiamando la macro
@@ -24,9 +26,9 @@
 
 struct editorConfig 
 {
+	int cx, cy; //cursor x,y
     int screenrows;
-    int screencols;
-
+    int screencols;							
     struct termios orig_termios;
 };
 
@@ -178,7 +180,7 @@ void makeBuf(struct tBuf *newBuf, const char *string, int bufLen)
 		return;
 	}
 
-	memcpy(&new[newBuf->lenght], string, bufLen);
+	memcpy(&new[newBuf->lenght], string, bufLen);//Questo è un puntatore alla locazione di memoria successiva ai dati dentro "new" correnti, dire *(new + newBuf->lenght)
 	newBuf->buf = new;
 	newBuf->lenght += bufLen; 
 }
@@ -196,14 +198,48 @@ void freeBuf(struct tBuf *freeBuff)
 void drawTilde(struct tBuf *tildeBuff) 
 {
     int y;
+    
     for (y = 0; y < E.screenrows; y++) 
     {
-      makeBuf(tildeBuff, "~", 1);
+    	if(y == 1)
+    	{
+    		char ciao[80];
+			int ciaoLen = snprintf(ciao, sizeof(ciao), "TEIC version: %s", TEIC_VERSION);
+			//creo un buffer di caratteri dove metto "TEIC version..."
 
-      if(y < E.screenrows - 1)
-      {
-      	makeBuf(tildeBuff, "\r\n", 2);
-      }
+			if(ciaoLen > E.screencols)
+			{
+				ciaoLen = E.screencols;
+			} 
+
+			int padding = (E.screencols - ciaoLen) / 2;
+
+			if(padding)
+			{
+				makeBuf(tildeBuff, "~ ", 1);
+				padding--;
+			}
+	    	while(padding--)
+	    	//prendo padding-- perchè si deve aggiornare ancora il risultato nel loop 
+	    	//nel mentre disegna lo spazio e poi il titolo
+	    	{
+	    		makeBuf(tildeBuff, " ", 1);
+	    	}
+
+			makeBuf(tildeBuff, ciao, ciaoLen);
+		}
+		else
+		{
+    		makeBuf(tildeBuff, "~", 1);
+    	}
+
+		makeBuf(tildeBuff, "\x1b[K",3);
+		//K lo usiamo per pulire lo schermo una riga alla volta	
+		
+      	if(y < E.screenrows - 1)
+      	{
+      		makeBuf(tildeBuff, "\r\n", 2);
+      	}
     }
 }
 
@@ -211,13 +247,15 @@ void renderUI()
 {
 	struct tBuf buff = TBUF_INIT;
 
-	makeBuf(&buff, "\x1b[2J",4);
+	makeBuf(&buff, "\x1b[?25l",6);//?25 = nasconde/mostra cursore l = set mode
+	//makeBuf(&buff, "\x1b[2J",4);
 	makeBuf(&buff, "\x1b[H",3);
 
 	
 	drawTilde(&buff);
 
 	makeBuf(&buff, "\x1b[H",3);
+	makeBuf(&buff, "\x1b[?25h",6);//h = reset mode
 	
 	write(STDOUT_FILENO,buff.buf, buff.lenght);
 	//passiamo 4 byte in memoria:
@@ -256,6 +294,9 @@ void keypress()
 
 void initEditor() 
 {
+	E.cx = 0, E.cy = 0;
+
+
     if (getWindowSize(&E.screenrows, &E.screencols) == -1)
    	   error("getWindowSize");
 }
@@ -280,4 +321,3 @@ int main()
 														
 	return 0;
 }
-
