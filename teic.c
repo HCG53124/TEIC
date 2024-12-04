@@ -36,9 +36,9 @@ enum arrows
 
 struct editorConfig 
 {
-	int cx, cy; //cursor x,y
+	int cx, cy; //cursor position x,y
     int screenrows;
-    int screencols;							
+    int screencols;					
     struct termios orig_termios;
 };
 
@@ -51,7 +51,7 @@ struct editorConfig E;
 
 void error(const char *s)//handlign del messaggio di errore
 {
-	write(STDOUT_FILENO, "\x1b[2J", 4);
+	write(STDOUT_FILENO, "\x1b[2J", 4);//\x1b è visto come un solo byte perchè viene interpretato come "27" ovver l'escape sequence
   	write(STDOUT_FILENO, "\x1b[H", 3);
 
 	perror(s);//funziona perchè const char *s è il primo
@@ -62,7 +62,8 @@ void error(const char *s)//handlign del messaggio di errore
 
 void returnCookedMode()
 {
-	  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1) 
+	  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1)
+	  	 //dopo di tutto tcsetattr fa TCSAFLUSH, prima scrive &E.orig_termios dentro STDIN_FILENO
 	  	error("tcgetattr");
 	
 }
@@ -168,7 +169,7 @@ int cursorPos(int *rows, int *cols)
 
     while (i < sizeof(buf) - 1) 
     {
-    	if (read(STDIN_FILENO, &buf[i], 1) != 1)
+    	  if (read(STDIN_FILENO, &buf[i], 1) != 1)//leggo dentro a buf attraverso il suo indirizzo
 			break;
 
         if (buf[i] == 'R') 
@@ -183,6 +184,8 @@ int cursorPos(int *rows, int *cols)
     	 return -1;
 
     if (sscanf(&buf[2], "%d;%d", rows, cols) != 2) 
+    //sscanf() sta per "String Scan Formatted". Questa funzione è usata per analizzare le stringhe formattate 
+    //a differenza di scanf() che legge dal flusso di input, la funzione sscanf() estrae i dati da una stringa
     	return -1;
 
     return 0;
@@ -195,18 +198,16 @@ int getWindowSize(int *rows, int *cols)
     
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) 
 	{						//get win size
-    	if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 10) != 10)
+    	if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 10) != 10) return -1;
     	//B = cursod down C = Cursor Forward
-    		return -1;
-
-    	return cursorPos(rows, cols);
     } 
     else 
     {
       *cols = ws.ws_col;
       *rows = ws.ws_row;
+
+  	}
       return 0;
-  }
 }
 
 
@@ -220,7 +221,7 @@ struct tBuf//buffer per fare tutti i write() delle tilde insieme, invece che una
 
 #define TBUF_INIT {NULL,0} //inizializzo il buffer
 
-void makeBuf(struct tBuf *newBuf, const char *string, int bufLen)
+void makeBuf(struct tBuf *newBuf, const char *string, int bufLen)//buffer creato per disegnare le tilde
 {
 	char *new = realloc(newBuf->buf, newBuf->lenght + bufLen);//new è l'oggetto di grandezza l+bl
 
@@ -254,6 +255,7 @@ void drawTilde(struct tBuf *tildeBuff)
     	{
     		char ciao[80];
 			int ciaoLen = snprintf(ciao, sizeof(ciao), "TEIC version: %s", TEIC_VERSION);
+			//In C, snprintf() function is a standard library function that is used to print the specified string till a specified length in the specified format
 			//creo un buffer di caratteri dove metto "TEIC version..."
 
 			if(ciaoLen > E.screencols)
