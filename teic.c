@@ -20,18 +20,8 @@
 //azzerati, questo mi permetto di usare i codici di controllo(che vanno da 0 a 31) senza fatica richiamando la macro
 //e dandole in pasto un char
 
-enum arrows
-{
-	ARROW_LEFT = 1000,
-	ARROW_RIGHT,
-	ARROW_UP,
-	ARROW_DOWN,
-	DELETE,
-	HOME_KEY,
-	END_KEY,
-	PAGE_UP,
-	PAGE_DOWN
-};
+#define TBUF_INIT {NULL,0} //inizializzo il buffer
+
 
 /***defines end***/
 
@@ -47,6 +37,25 @@ struct editorConfig
 
 struct editorConfig E;
 //Usato per ripristinare il terminale dell'utente a sessione terminata.
+
+struct tBuf//buffer per fare tutti i write() delle tilde insieme, invece che una alla volta
+{
+	char *buf;
+	int lenght;
+};
+
+enum arrows
+{
+	ARROW_LEFT = 1000,
+	ARROW_RIGHT,
+	ARROW_UP,
+	ARROW_DOWN,
+	DELETE,
+	HOME_KEY,
+	END_KEY,
+	PAGE_UP,
+	PAGE_DOWN
+};
 
 /*** data end ***/
 
@@ -122,18 +131,18 @@ int readKey(void)
 	{
 		char seq[3];
 
-		if(read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
+		if(read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';//controlliamo che ci sia qualcosa dentro seq
 		if(read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
 
-		if(seq[0] == '[')
+		if(seq[0] == '[')//funziona perchè il terminale anche senza specificare STDIN_FILENO legge lo stesso
 		{
-			if(seq[1] >= '0' && seq[1] <= 9)
+			if(seq[1] >= '0' && seq[1] <= '9')//leggiamo le lettere per vedere se dopo ci dovremo mettere la tilde
 			{
 				if(read(STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
 
-				if(seq[2]=='~')
+				if(seq[2]=='~')//la tilde precede il comando per pagUp e pagDown
 				{
-					switch(seq[1])
+					switch(seq[1])// \x1b[5~ o 6 o 7 ecc arrivati a questo punto
 					{
 						case '1': return HOME_KEY;
 						case '3': return DELETE;
@@ -187,7 +196,7 @@ int cursorPos(int *rows, int *cols)
 
     while (i < sizeof(buf) - 1) 
     {
-    	  if (read(STDIN_FILENO, &buf[i], 1) != 1)//leggo dentro a buf attraverso il suo indirizzo
+		if (read(STDIN_FILENO, &buf[i], 1) != 1)//scrivo dentro a buf attraverso il suo indirizzo
 			break;
 
         if (buf[i] == 'R') 
@@ -210,14 +219,14 @@ int cursorPos(int *rows, int *cols)
 
 }
 
-int getWindowSize(int *rows, int *cols) 
+int getWindowSize(int *rows, int *cols)//la uso come base per dire alle altre funzioni quanto e dove debbano scrivere la prima volta
 {
-    struct winsize ws;
+    struct winsize ws;// viene da <sys/ioctl.h>.
     
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) 
 	{						//get win size
-    	if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 10) != 10) return -1;
-    	//B = cursod down C = Cursor Forward
+    	if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12) return -1;
+    	//B = cursod down C = Cursor Forward ovvero angolo in basso a destra
     } 
     else 
     {
@@ -231,24 +240,20 @@ int getWindowSize(int *rows, int *cols)
 
 /*** Buffer ***/
 
-struct tBuf//buffer per fare tutti i write() delle tilde insieme, invece che una alla volta
-{
-	char *buf;
-	int lenght;
-};
-
-#define TBUF_INIT {NULL,0} //inizializzo il buffer
-
 void makeBuf(struct tBuf *newBuf, const char *string, int bufLen)//buffer creato per disegnare le tilde
 {
-	char *new = realloc(newBuf->buf, newBuf->lenght + bufLen);//new è l'oggetto di grandezza l+bl
-
+	//è char perchè i puntatori sono solo 1 byte
+	char *new = realloc(newBuf->buf, newBuf->lenght + bufLen);//newBuf->buf=(*newBuf).buf . new è l'oggetto di grandezza l+bl ma noi puntiamo a quell'oggetto
+				//cambio la dimensione del blocco di mememoria puntato da newBuf
 	if(new == NULL)
 	{	
 		return;
 	}
 
-	memcpy(&new[newBuf->lenght], string, bufLen);//Questo è un puntatore alla locazione di memoria successiva ai dati dentro "new" correnti, dire *(new + newBuf->lenght)
+	memcpy(&new[newBuf->lenght], string, bufLen);//Questo è un puntatore alla locazione di memoria successiva ai dati dentro "new" correnti
+		//= [&new + (*newBuf).lenght]
+
+	//riassegno valori a buf e lenght nella struct per il prossimo ciclo
 	newBuf->buf = new;
 	newBuf->lenght += bufLen; 
 }
@@ -257,13 +262,14 @@ void freeBuf(struct tBuf *freeBuff)
 {
 	free(freeBuff->buf);
 }
+
 /*** End Buffer ***/
 
 /*** terminal end ***/
 
 /*** UI start ***/
 
-void drawTilde(struct tBuf *tildeBuff) 
+void genTilde(struct tBuf *tildeBuff) //generiamo le tilde da disegnare dopo
 {
     int y;
     
@@ -281,7 +287,7 @@ void drawTilde(struct tBuf *tildeBuff)
 				ciaoLen = E.screencols;
 			} 
 
-			int padding = (E.screencols - ciaoLen) / 2;
+			int padding = (E.screencols - ciaoLen)/2;//funziona perchè calcola di stampare  ~ e " " solo per metà schermo
 
 			if(padding)
 			{
@@ -321,7 +327,7 @@ void renderUI()
 	makeBuf(&buff, "\x1b[H",3);
 
 	
-	drawTilde(&buff);
+	genTilde(&buff);
 
 	char buf[32];
 	snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);//passiamo a %H c.xe c.y
