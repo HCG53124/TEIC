@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <string.h> 
+#include <sys/types.h> 
 
 /*** inludes end ***/
 
@@ -20,18 +21,26 @@
 //azzerati, questo mi permetto di usare i codici di controllo(che vanno da 0 a 31) senza fatica richiamando la macro
 //e dandole in pasto un char
 
-#define TBUF_INIT {NULL,0} //inizializzo il buffer
+#define TBUF_INIT {NULL,0} //inizializzo il buffer che userò in renderUI()
 
 
 /***defines end***/
 
 /***data start***/
 
+typedef struct erow //editor rows, la usiamo per salvare una linea di testo
+{
+	int size;
+	char *chars;
+}erow;
+
 struct editorConfig 
 {
 	int cx, cy; //cursor position x,y
     int screenrows;
-    int screencols;					
+    int screencols;
+    int numrows;
+    erow row;					
     struct termios orig_termios;
 };
 
@@ -237,6 +246,23 @@ int getWindowSize(int *rows, int *cols)//la uso come base per dire alle altre fu
       return 0;
 }
 
+/*** File I/O ***/
+
+void editorOpen()
+{
+	char *line = "Hello, TEIC!";
+	ssize_t linelen = 12;
+
+	E.row.size = linelen;
+	E.row.chars = malloc(linelen +1);
+
+	memcpy(E.row.chars, line, linelen);
+
+	E.row.chars[linelen] = '\0';
+	E.numrows = 1;
+}
+
+/*** end File I/O ***/
 
 /*** Buffer ***/
 
@@ -274,49 +300,60 @@ void genTilde(struct tBuf *tildeBuff) //generiamo le tilde da disegnare dopo
     int y;
     
     for (y = 0; y < E.screenrows; y++) 
-    {
-    	if(y == 1)
-    	{
-    		char ciao[80];
-			int ciaoLen = snprintf(ciao, sizeof(ciao), "TEIC version: %s", TEIC_VERSION);
-			//In C, snprintf() function is a standard library function that is used to print the specified string till a specified length in the specified format
-			//creo un buffer di caratteri dove metto "TEIC version..."
-
-			if(ciaoLen > E.screencols)
-			{
-				ciaoLen = E.screencols;
-			} 
-
-			int padding = (E.screencols - ciaoLen)/2;//funziona perchè calcola di stampare  ~ e " " solo per metà schermo
-
-			if(padding)
-			{
-				makeBuf(tildeBuff, "~ ", 1);
-				padding--;
-			}
-	    	while(padding--)
-	    	//prendo padding-- perchè si deve aggiornare ancora il risultato nel loop 
-	    	//nel mentre disegna lo spazio e poi il titolo
+	{
+	    if(y >= E.numrows)
+	    {
+	    	if(y == 1)
 	    	{
-	    		makeBuf(tildeBuff, " ", 1);
+	    		char ciao[80];
+				int ciaoLen = snprintf(ciao, sizeof(ciao), "TEIC version: %s", TEIC_VERSION);
+				//In C, snprintf() function is a standard library function that is used to print the specified string till a specified length in the specified format
+				//creo un buffer di caratteri dove metto "TEIC version..."
+	
+				if(ciaoLen > E.screencols)
+				{
+					ciaoLen = E.screencols;
+				} 
+	
+				int padding = (E.screencols - ciaoLen)/2;//funziona perchè calcola di stampare  ~ e " " solo per metà schermo
+	
+				if(padding)
+				{
+					makeBuf(tildeBuff, "~ ", 1);
+					padding--;
+				}
+		    	while(padding--)
+		    	//prendo padding-- perchè si deve aggiornare ancora il risultato nel loop 
+		    	//nel mentre disegna lo spazio e poi il titolo
+		    	{
+		    		makeBuf(tildeBuff, " ", 1);
+		    	}
+	
+				makeBuf(tildeBuff, ciao, ciaoLen);
+			}
+			else
+			{
+	    		makeBuf(tildeBuff, "~", 1);
 	    	}
-
-			makeBuf(tildeBuff, ciao, ciaoLen);
 		}
 		else
 		{
-    		makeBuf(tildeBuff, "~", 1);
-    	}
+			int len = E.row.size;
 
-		makeBuf(tildeBuff, "\x1b[K",3);
-		//K lo usiamo per pulire lo schermo una riga alla volta	
-		
-      	if(y < E.screenrows - 1)
-      	{
-      		makeBuf(tildeBuff, "\r\n", 2);
-      	}
-    }
+      		if (len > E.screencols) len = E.screencols;
+
+      		makeBuf(tildeBuff, E.row.chars, len);
+		}
+			makeBuf(tildeBuff, "\x1b[K",3);
+			//K lo usiamo per pulire lo schermo una riga alla volta	
+			
+  	    	if(y < E.screenrows - 1)
+    	  	{
+    	  		makeBuf(tildeBuff, "\r\n", 2);
+    	  	}
+    	}
 }
+
 
 void renderUI()
 {
@@ -435,8 +472,8 @@ void keypress()
 
 void initEditor() 
 {
-	E.cx = 0, E.cy = 0;
-
+	E.cx = 0, E.cy = 0, E.numrows = 0;
+	
 
     if (getWindowSize(&E.screenrows, &E.screencols) == -1)
    	   error("getWindowSize");
@@ -447,6 +484,7 @@ int main()
 {
 	rawMode();
 	initEditor();
+	editorOpen();
 	
 	while (1) 
 	{
