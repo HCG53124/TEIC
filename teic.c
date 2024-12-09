@@ -1,5 +1,11 @@
 /*** inludes start ***/
 
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
+
+
+
 #include <unistd.h>
 #include <termios.h>
 #include <stdlib.h>
@@ -40,7 +46,7 @@ struct editorConfig
     int screenrows;
     int screencols;
     int numrows;
-    erow row;					
+    erow *row;					
     struct termios orig_termios;
 };
 
@@ -246,20 +252,51 @@ int getWindowSize(int *rows, int *cols)//la uso come base per dire alle altre fu
       return 0;
 }
 
+/*** Row Operations ***/
+
+void editorAppendRow(char *s, size_t len)//alloco spazio per erow e copio la stringa in un nuovo erow alla fine di E.row
+{
+    E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
+
+    int at = E.numrows;
+
+    E.row[at].size = len;
+    E.row[at].chars = malloc(len + 1);
+
+    memcpy(E.row[at].chars, s, len);
+
+    E.row[at].chars[len] = '\0';
+
+    E.numrows++;
+}
+
+/*** End Row Operations ***/
+
 /*** File I/O ***/
 
-void editorOpen()
+void editorOpen(char *filename)
 {
-	char *line = "Hello, TEIC!";
-	ssize_t linelen = 12;
+	FILE *fp = fopen(filename , "r");
+	if(!fp) error("fopen");
+	
+	char *line = NULL;
+	size_t linecap = 0;
+	ssize_t linelen;
 
-	E.row.size = linelen;
-	E.row.chars = malloc(linelen +1);
+	//linelen = getline(&line, &linecap, fp);//// DA RIVEDERE
+	//legge una riga dalla stream e salva l'indirizzo del buffer contenente il testo dentro &line
 
-	memcpy(E.row.chars, line, linelen);
+	while((linelen = getline(&line, &linecap, fp)) != -1)
+	{
+		while(linelen > 0 && (line[linelen -1] == '\n' || line[linelen -1] == '\r'))
+			linelen--;
+			//quest loop serve perchè l'ultimo carattere di line dovrebbe essere una \n o \r
+	
+		editorAppendRow(line, linelen);
+	}	
 
-	E.row.chars[linelen] = '\0';
-	E.numrows = 1;
+	free(line);
+	fclose(fp);//flushiamo la stream fp
 }
 
 /*** end File I/O ***/
@@ -303,7 +340,7 @@ void genTilde(struct tBuf *tildeBuff) //generiamo le tilde da disegnare dopo
 	{
 	    if(y >= E.numrows)
 	    {
-	    	if(y == 1)
+	    	if(E.numrows == 0 && y == 1)
 	    	{
 	    		char ciao[80];
 				int ciaoLen = snprintf(ciao, sizeof(ciao), "TEIC version: %s", TEIC_VERSION);
@@ -338,11 +375,11 @@ void genTilde(struct tBuf *tildeBuff) //generiamo le tilde da disegnare dopo
 		}
 		else
 		{
-			int len = E.row.size;
+			int len = E.row[y].size;
 
       		if (len > E.screencols) len = E.screencols;
 
-      		makeBuf(tildeBuff, E.row.chars, len);
+      		makeBuf(tildeBuff, E.row[y].chars, len);
 		}
 			makeBuf(tildeBuff, "\x1b[K",3);
 			//K lo usiamo per pulire lo schermo una riga alla volta	
@@ -472,7 +509,7 @@ void keypress()
 
 void initEditor() 
 {
-	E.cx = 0, E.cy = 0, E.numrows = 0;
+	E.cx = 0, E.cy = 0, E.numrows = 0, E.row = NULL;
 	
 
     if (getWindowSize(&E.screenrows, &E.screencols) == -1)
@@ -480,11 +517,15 @@ void initEditor()
 }
 
 
-int main()
+int main(int argc, char *argv[])
 {
 	rawMode();
 	initEditor();
-	editorOpen();
+
+	if(argc >= 2)//perchè ./
+	{
+		editorOpen(argv[1]);//primo byte del file che fa seguire anche gli altri
+	}
 	
 	while (1) 
 	{
