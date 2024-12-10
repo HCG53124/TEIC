@@ -3,7 +3,7 @@
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE
 #define _GNU_SOURCE
-
+//queste macro sono qui per compatibilità con sistemi più vecchi e sistemi BSD
 
 
 #include <unistd.h>
@@ -20,7 +20,7 @@
 
 /*** defines start ***/
 
-#define TEIC_VERSION "0.0.1"
+#define TEIC_VERSION "0.1.0"
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 //faccio l'AND tra k e 0x1f(0001 1111) e lo uso perchè così ogni numero a 8 bit (ASCII quindi) ha i primi 3 bit
@@ -46,7 +46,9 @@ struct editorConfig
     int screenrows;
     int screencols;
     int numrows;
-    erow *row;					
+    int rowoff; //row offset
+    int coloff; //collumn offset
+    erow *row;		
     struct termios orig_termios;
 };
 
@@ -268,7 +270,7 @@ void editorAppendRow(char *s, size_t len)//alloco spazio per erow e copio la str
     E.row[at].chars[len] = '\0';
 
     E.numrows++;
-}
+}//usa questa funzione che poi verrà chiamata in genTilde() per salvare in un buffer le righe che scriverò
 
 /*** End Row Operations ***/
 
@@ -276,7 +278,7 @@ void editorAppendRow(char *s, size_t len)//alloco spazio per erow e copio la str
 
 void editorOpen(char *filename)
 {
-	FILE *fp = fopen(filename , "r");
+	FILE *fp = fopen(filename , "r");//perchè cos' abbiamo l'indirizzo del file dentro fp
 	if(!fp) error("fopen");
 	
 	char *line = NULL;
@@ -284,9 +286,10 @@ void editorOpen(char *filename)
 	ssize_t linelen;
 
 	//linelen = getline(&line, &linecap, fp);//// DA RIVEDERE
-	//legge una riga dalla stream e salva l'indirizzo del buffer contenente il testo dentro &line
-
-	while((linelen = getline(&line, &linecap, fp)) != -1)
+	//legge una riga dalla stream(fp) e salva l'indirizzo del buffer(in &line), il buffer termina in NULL e ha \n alla fine
+	//uso &linecap per perchè non essendo largo abbastanza geline userò realloc() e aggiornerà &line e fp
+	
+	while((linelen = getline(&line, &linecap, fp)) != -1)//finchè non sono a fine file
 	{
 		while(linelen > 0 && (line[linelen -1] == '\n' || line[linelen -1] == '\r'))
 			linelen--;
@@ -295,7 +298,7 @@ void editorOpen(char *filename)
 		editorAppendRow(line, linelen);
 	}	
 
-	free(line);
+	free(line);//facciamo free perchè abiamo dichiarato *line come NULL e getline richide il free in questo case
 	fclose(fp);//flushiamo la stream fp
 }
 
@@ -332,13 +335,40 @@ void freeBuf(struct tBuf *freeBuff)
 
 /*** UI start ***/
 
+void editorScroll()
+{
+	//vertical scroll
+	if(E.cy < E.rowoff) 
+	{	
+		E.rowoff = E.cy;
+	}
+	
+	if(E.cy >= E.rowoff + E.screenrows) 
+	{
+		E.rowoff = E.cy - E.screenrows + 1;
+	}
+
+	//horizontal scroll
+	if(E.cx < E.coloff)
+	{
+		E.coloff = E.cx;
+	}
+
+	if(E.cx >= E.coloff + E.screencols)
+	{
+		E.coloff = E.cx - E.screencols +1;
+	}
+}
+
 void genTilde(struct tBuf *tildeBuff) //generiamo le tilde da disegnare dopo
 {
     int y;
     
     for (y = 0; y < E.screenrows; y++) 
 	{
-	    if(y >= E.numrows)
+		int filerow = y + E.rowoff;
+
+	    if(filerow >= E.numrows)
 	    {
 	    	if(E.numrows == 0 && y == 1)
 	    	{
@@ -375,11 +405,15 @@ void genTilde(struct tBuf *tildeBuff) //generiamo le tilde da disegnare dopo
 		}
 		else
 		{
-			int len = E.row[y].size;
+			int len = E.row[filerow].size - E.coloff;
+			//così scrive alla prima riga la prima riga del testo e così via senza strabordare a destra
 
-      		if (len > E.screencols) len = E.screencols;
+			if(len < 0) len = 0;
+      		if (len > E.screencols) len = E.screencols;//tronto il testo se è troppo lungo
 
-      		makeBuf(tildeBuff, E.row[y].chars, len);
+			makeBuf(tildeBuff, &E.row[filerow].chars[E.coloff], len);
+			makeBuf(tildeBuff, &E.row[filerow].chars[E.coloff], len);
+      		makeBuf(tildeBuff, E.row[filerow].chars, len);//effettivamente scriviamo
 		}
 			makeBuf(tildeBuff, "\x1b[K",3);
 			//K lo usiamo per pulire lo schermo una riga alla volta	
@@ -394,6 +428,8 @@ void genTilde(struct tBuf *tildeBuff) //generiamo le tilde da disegnare dopo
 
 void renderUI()
 {
+	editorScroll();
+
 	struct tBuf buff = TBUF_INIT;
 
 	makeBuf(&buff, "\x1b[?25l",6);//?25 = nasconde/mostra cursore l = set mode
@@ -404,7 +440,8 @@ void renderUI()
 	genTilde(&buff);
 
 	char buf[32];
-	snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);//passiamo a %H c.xe c.y
+	snprintf(buf, sizeof(buf), "\x1b[%d;%dH",(E.cy - E.rowoff) + 1,
+											 (E.cx - E.coloff) + 1);//passiamo a %H c.xe c.y
 	makeBuf(&buff, buf, strlen(buf));
 	
 	makeBuf(&buff, "\x1b[?25h",6);//h = reset mode
@@ -435,10 +472,8 @@ void moveCursor(int key)
 		break;
 	
 		case ARROW_RIGHT:
-			if(E.cx != E.screencols -1)
-			{
-				E.cx++;
-			}
+			E.cx++;
+			
 		break;
 		
 		case ARROW_UP:
@@ -449,7 +484,7 @@ void moveCursor(int key)
 		break;
 		
 		case ARROW_DOWN:
-			if(E.cy != E.screenrows -1)
+			if(E.cy < E.numrows)
 			{
 				E.cy++;
 			}		
@@ -509,8 +544,13 @@ void keypress()
 
 void initEditor() 
 {
-	E.cx = 0, E.cy = 0, E.numrows = 0, E.row = NULL;
-	
+	E.cx = 0;
+	E.cy = 0;
+
+	E.row = NULL; 
+	E.numrows = 0;
+	E.rowoff = 0;//è 0 perchè di default siamo in cima al file
+	E.coloff = 0;//è 0 perchè di default siamo a sinistra del file
 
     if (getWindowSize(&E.screenrows, &E.screencols) == -1)
    	   error("getWindowSize");
