@@ -1,24 +1,23 @@
 /*** inludes start ***/
 
-#define _DEFAULT_SOURCE
-#define _BSD_SOURCE
-#define _GNU_SOURCE
-//queste macro sono qui per compatibilità con sistemi più vecchi e sistemi BSD
-
-
 #include <unistd.h>
 #include <termios.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <errno.h>
-#include <sys/ioctl.h>
 #include <string.h> 
+#include <sys/ioctl.h>
 #include <sys/types.h> 
 
 /*** inludes end ***/
 
 /*** defines start ***/
+
+#define _DEFAULT_SOURCE
+#define _BSD_SOURCE
+#define _GNU_SOURCE
+//queste macro sono qui per compatibilità con sistemi più vecchi e sistemi BSD
 
 #define TEIC_VERSION "0.1.0"
 
@@ -45,15 +44,16 @@ struct editorConfig
 	int cx, cy; //cursor position x,y
     int screenrows;
     int screencols;
+
     int numrows;
+
     int rowoff; //row offset
     int coloff; //collumn offset
+
     erow *row;		
+
     struct termios orig_termios;
 };
-
-struct editorConfig E;
-//Usato per ripristinare il terminale dell'utente a sessione terminata.
 
 struct tBuf//buffer per fare tutti i write() delle tilde insieme, invece che una alla volta
 {
@@ -61,9 +61,11 @@ struct tBuf//buffer per fare tutti i write() delle tilde insieme, invece che una
 	int lenght;
 };
 
+struct editorConfig E;
+
 enum arrows
 {
-	ARROW_LEFT = 1000,
+	ARROW_LEFT = 1000,//1000 perchè sta fuori dal range dei char
 	ARROW_RIGHT,
 	ARROW_UP,
 	ARROW_DOWN,
@@ -80,13 +82,11 @@ enum arrows
 
 void error(const char *s)//handlign del messaggio di errore
 {
-	write(STDOUT_FILENO, "\x1b[2J", 4);//\x1b è visto come un solo byte perchè viene interpretato come "27" ovver l'escape sequence
+	write(STDOUT_FILENO, "\x1b[2J", 4);//\x1b è visto come un solo byte perchè viene interpretato come "27" ovvero l'escape sequence
   	write(STDOUT_FILENO, "\x1b[H", 3);
 
-	perror(s);//funziona perchè const char *s è il primo
-			 //carattere della stringa che "attiva" perror
+	perror(s);//funziona perchè const char *s è l'indirizzo per primo carattere della stringa
 	exit(1);
-	
 }
 
 void returnCookedMode()
@@ -99,7 +99,8 @@ void returnCookedMode()
 
 void rawMode()
 {
-	if (tcgetattr(STDIN_FILENO, &E.orig_termios) == -1) 
+	if (tcgetattr(STDIN_FILENO, &E.orig_termios) == -1)//esegue i comandi nella condizione perchè sennò non potrebbe evaluarli, poi il risultato rimane come
+													  //cambiamente "permanente" nel terminale
 		error("tcgetattr");
 
 	struct termios raw = E.orig_termios;
@@ -140,18 +141,18 @@ int readKey(void)
 	while((check = read(STDIN_FILENO, &c, 1)) != 1)//finchè non gli passo più di un char
 	//avendo disattivato ICANON sarebbe anomalo avere più byte passati alla func
 	{
-		if(check == -1 && errno != EAGAIN)
+		if(check == -1 && errno != EAGAIN)//EAGAIN è un errore non bloccante. Error try Again(?).
 			error("read");
 	}
 
-	if(c == '\x1b')
+	if(c == '\x1b')//escape sequence
 	{
 		char seq[3];
 
 		if(read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';//controlliamo che ci sia qualcosa dentro seq
 		if(read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
 
-		if(seq[0] == '[')//funziona perchè il terminale anche senza specificare STDIN_FILENO legge lo stesso
+		if(seq[0] == '[')//funziona perchè il terminale anche senza specificare perchè STDIN_FILENO legge dentro seq 
 		{
 			if(seq[1] >= '0' && seq[1] <= '9')//leggiamo le lettere per vedere se dopo ci dovremo mettere la tilde
 			{
@@ -346,7 +347,7 @@ void editorScroll()
 	if(E.cy >= E.rowoff + E.screenrows) 
 	{
 		E.rowoff = E.cy - E.screenrows + 1;
-	}
+	}//sposto verso il basso il cursore a fine schermo
 
 	//horizontal scroll
 	if(E.cx < E.coloff)
@@ -356,7 +357,7 @@ void editorScroll()
 
 	if(E.cx >= E.coloff + E.screencols)
 	{
-		E.coloff = E.cx - E.screencols +1;
+		E.coloff = E.cx - E.screencols + 1;
 	}
 }
 
@@ -412,8 +413,6 @@ void genTilde(struct tBuf *tildeBuff) //generiamo le tilde da disegnare dopo
       		if (len > E.screencols) len = E.screencols;//tronto il testo se è troppo lungo
 
 			makeBuf(tildeBuff, &E.row[filerow].chars[E.coloff], len);
-			makeBuf(tildeBuff, &E.row[filerow].chars[E.coloff], len);
-      		makeBuf(tildeBuff, E.row[filerow].chars, len);//effettivamente scriviamo
 		}
 			makeBuf(tildeBuff, "\x1b[K",3);
 			//K lo usiamo per pulire lo schermo una riga alla volta	
